@@ -4,7 +4,7 @@ load('synthetic_ESSCLC_data.RData')
 t = seq(0,1,length = 100)
 t = rev(rev(t)[-1])
 foo = matrix(0,nrow=nrow(episodes),ncol = length(t))
-IDS = sample(unique(dat$ID),500)
+
 
 indx = 1
 for(i in t){
@@ -23,9 +23,13 @@ foo3 = left_join(foo21,foo2)
 foo3[is.na(foo3)] = 0
 
 
+IDS = sample(unique(dat$ID),500)
 foo3 = foo3[foo3$ID %in% IDS,]
 foo4 = reshape(foo3,direction='wide',idvar='ID',timevar = 'setting')
 
+
+
+#####REDO Code###########
 foo20 = foo2
 foo20[foo20 == 1] = NA
 foo20[foo20 == 0] = 1
@@ -43,7 +47,7 @@ foo5[is.na(foo5)] = 0
 
 foo5 = foo5[foo5$ID %in% IDS,]
 foo6 = reshape(foo5,direction='wide',idvar='ID',timevar = 'setting')
-
+######################
 
 
 require(ade4)
@@ -58,10 +62,10 @@ D3 = D3/max(D3)
 D4 = dist(summary.stats[summary.stats$ID %in% IDS,c(13)])
 D4 = D4/max(D4)
 
-D5 = dist.binary(foo6[,-1],method=2)
+#D5 = dist.binary(foo6[,-1],method=2)
 
 
-Viz = function(D,widedat,stats){
+Viz = function(D,widedat,stats,DLabels){
         require(shiny)
         require(cluster)
         Dm = length(D)
@@ -76,7 +80,7 @@ Viz = function(D,widedat,stats){
                 server = function(input, output){
                         output$weights = renderUI({
                                 lapply(1:(Dm), function(i) {
-                                sliderInput(paste0('w', i), paste0('Weights', i),
+                                sliderInput(paste0('w', i), DLabels,
                                             value = 1/Dm,0,1)
                         })})
                         #cluster based on new distance
@@ -100,7 +104,7 @@ Viz = function(D,widedat,stats){
                                         for(j in 1:4){
                                                 lines(foo[(1+99*(j-1)):(99 + 99*(j-1))],col=j)
                                         }
-                                        mtext(paste0('Mean Survival: ',round(colMeans(stats[clust$clustering ==k,9],na.rm=TRUE),2),' Days'),1)
+                                        mtext(paste0('Mean Survival: ',round(colMeans(stats[clust$clustering ==k,9],na.rm=TRUE),2),' Days'),1) #could be median... try using apply()
                                         boxplot(stats[clust$clustering ==k,1:4],ylim=c(0,1))
                                         boxplot(stats[clust$clustering ==k,5:8],ylim=c(0,20))
                                         #abline(v=seq(.25,.8,by=.25),col='black',lwd=1)

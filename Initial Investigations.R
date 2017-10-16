@@ -1,5 +1,11 @@
 load('synthetic_ESSCLC_data.RData')
 
+IDS <- sample(unique(episodes$ID),500)
+episodes <- episodes[episodes$ID %in% IDS,]
+summary.stats <- summary.stats[summary.stats$ID %in% IDS,]
+
+
+
 #convert to grid of observations
 t = seq(0,1,length = 100)
 t = rev(rev(t)[-1])
