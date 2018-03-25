@@ -96,10 +96,14 @@ Viz = function(D,widedat,stats,DLabels){
   Dm = length(D)
   shinyApp(
     ui = fluidPage(
-      sidebarLayout(
-        sidebarPanel(
+      
+      titlePanel("Hospitalization in Cancer Patients"),
+      sidebarLayout(position="right",
+        sidebarPanel(selectInput('K',label = 'Select Number of Clusters',choices = 2:10,selected = 2),"Select Weighting For Clusters",
+          
           uiOutput('weights')),
-        mainPanel(plotOutput("Viz",height='500px'))
+        #mainPanel(plotOutput("Viz",height='500px'))
+        mainPanel(tabsetPanel(uiOutput('tabs')))
       )
     ),
     server = function(input, output){
@@ -108,47 +112,60 @@ Viz = function(D,widedat,stats,DLabels){
           sliderInput(paste0('w', i), DLabels[i],
                       value = 1/Dm,0,1)
         })})
-      #cluster based on new distance
-
       
-      output$Viz = renderPlot({
-        w=c(.1,.1,.2,.3,.3)
-        Dtmp = Reduce('+',lapply(1:(Dm), function(i) eval(parse(text=paste0('input$w',i,'*D[[',i,']]')))))
-          #w[i]*D[[i]]))
-       
-        K = 5 #119-121
-        clust = pam(Dtmp,k=K)
-        P = prop.table(table(clust$clustering))
-        #clust$silinfo$avg.width
-        par(mfrow=c(1,K))
-        for(k in 1:K){
-          foo = colMeans(widedat[clust$clustering ==k,-1])
-          plot(foo[1:99],type='n',main=paste0('Cluster ',k,':',round(P[k],2)),ylab='Proportion',xlab='',xaxt='n',ylim=c(0,1))
-          for(j in 1:4){
-            lines(foo[(1+99*(j-1)):(99 + 99*(j-1))],col=j)
-          }
-          mtext(paste0('Mean Survival: ',round(colMeans(stats[clust$clustering ==k,9],na.rm=TRUE),2),' Days'),1) #could be median... try using apply()
-          #boxplot(stats[clust$clustering ==k,1:4],ylim=c(0,1))
-          #boxplot(stats[clust$clustering ==k,5:8],ylim=c(0,20))
-          #abline(v=seq(.25,.8,by=.25),col='black',lwd=1)
-          #axis(1,at=seq(0,.98,by=0.0625),label=rep(c(0,0.25,0.5,0.75),4))
-          #mtext(c('None','Hospital','Hospice','SNF'),3,line=.75,at=seq(.1,.95,by=.25),cex=.8)
-        }
+      output$tabs = renderUI({
+        lapply(1:(as.numeric(input$K)+1), function(i) {
+          tabPanel(paste0('Cluster ', i), plotOutput(paste0('plot',i)))
+        })})
+      #cluster based on new distance
+      
+      clustering = reactive({
+        #w=c(.1,.1,.2,.3,.3)
+        Dtmp = Reduce('+',lapply(1:(Dm), function(i) eval(parse(text=paste0('input$w',i,'*D[[',i,']]'))))) #not finding weights yet here...
+        #w[i]*D[[i]]))
         
+        K = as.numeric(input$K)
+        #browser()
+        clust = pam(Dtmp,k=K)
+        #P = prop.table(table(clust$clustering))
+        clust$clustering
+        #clust$silinfo$avg.width
       })
-    })
+      
+      observe({
+          clusters = clustering()
+          K = as.numeric(input$K)+1
+          for(k in 1:K){
+              output[[paste0('plot',k)]] = renderPlot({
+    
+              foo = colMeans(widedat[clusters == k,-1])
+              plot(foo[1:99],type='n',main=paste0('Cluster ',k,':',round(P[k],2)),ylab='Proportion',xlab='',xaxt='n',ylim=c(0,1))
+              for(j in 1:4){
+                lines(foo[(1+99*(j-1)):(99 + 99*(j-1))],col=j)
+              }
+              #mtext(paste0('Mean Survival: ',round(colMeans(stats[clusters ==k,9],na.rm=TRUE),2),' Days'),1) #could be median... try using apply()
+              
+              #boxplot(stats[clust$clustering ==k,1:4],ylim=c(0,1))
+              #boxplot(stats[clust$clustering ==k,5:8],ylim=c(0,20))
+              #abline(v=seq(.25,.8,by=.25),col='black',lwd=1)
+              #axis(1,at=seq(0,.98,by=0.0625),label=rep(c(0,0.25,0.5,0.75),4))
+              #mtext(c('None','Hospital','Hospice','SNF'),3,line=.75,at=seq(.1,.95,by=.25),cex=.8)
+            
+            
+              })
+          }
+      })
   # Add a column of summary info for each cluster....
+  }
+  )
+  
 }
 
 
-Viz(list(D1,D2,D3,D4,D5),widedat=foo4,stats=summary.stats[c(2:9,13)],DLabels = paste0('D',1:5))
+Viz(list(D1,D2,D3,D4,D5),widedat=foo4,stats=summary.stats[c(2:9,13)],DLabels = paste0('Weight ',1:5))
 
 image(as.matrix(D1-D2),breaks=seq(-1,1,length=13))  #Why are these so similar?
 image(as.matrix(D1-D3),breaks=seq(-1,1,length=13)) 
 image(as.matrix(D1-D4),breaks=seq(-1,1,length=13)) 
 image(as.matrix(D1-D5),breaks=seq(-1,1,length=13)) 
 image(as.matrix(D4-D5),breaks=seq(-1,1,length=13)) 
-
-
-
-
