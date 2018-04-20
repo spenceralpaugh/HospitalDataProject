@@ -1,0 +1,80 @@
+load('synthetic_ESSCLC_data.RData')
+require(ggplot2)
+
+IDS = sample(unique(episodes$ID),500) #Randomly Sample 500 IDS
+episodes = episodes[episodes$ID %in% IDS,]
+summary.stats = summary.stats[summary.stats$ID %in% IDS,]
+
+
+
+## First, create new dataset 100 grid points in relative time
+segments <- tbl_df(expand.grid(segment=seq(0,1,by=.01),ID=unique(episodes$ID)))
+segment.dat <- left_join(segments,episodes,by="ID") %>%
+  filter((segment >= FromDateRel)&(segment < ThruDateRel))  %>%
+  mutate(setting=factor(setting))
+
+
+
+#Create a data set (rows = setting in segments, columns = ID)
+L = levels(segment.dat$setting)
+dat = matrix(segment.dat$setting,nrow=100)
+dat = lapply(1:ncol(dat),function(i) factor(dat[,i],L))
+names(dat) = unique(segment.dat$ID)
+
+
+#Create a 4*(n-bw+1) vector of frequency counts within rolling window (defined by bandwidth: bw)
+bw = 6
+inputd = sapply(dat,function(z) matrix(sapply(1:(length(z)-bw+1),function(i) table(z[i:(i+bw-1)]))/bw,ncol=1))
+
+#Use optimized dist() to calculate differences in frequency vectors
+D = 0.5*dist(inputd,method='manhattan') #+ survival time metric
+
+require(cluster)
+K=5
+clust = pam(D, K)$clustering
+
+IDSplot = sample(unique(episodes$ID),100) #this does not work with the current changes to the code, dat is not found and I can't remember where it was supposed to come from
+episodes = episodes[episodes$ID %in% IDSplot,]
+summary.stats = summary.stats[summary.stats$ID %in% IDSplot,]
+clust = data.frame(ID=IDSplot,clust = clust[IDS %in% IDSplot])
+
+require(dplyr)
+require(tidyverse)
+episodes = episodes %>% left_join(clust) %>%  arrange(clust, ID,order)
+
+IDS = unique(episodes$ID)
+episodes$FID = unlist(sapply(1:length(IDS),function(i){
+  m = nrow(episodes[episodes$ID == IDS[i],])
+  rep(i,m)
+  }))
+
+L = episodes %>% group_by(clust) %>% summarize(m=max(FID)+1) %>% select(m) %>% slice(1:(K-1))
+require(ggplot2)
+plot1 = ggplot() +
+  geom_rect(data=episodes, aes(xmin=FromDateRel, xmax=ThruDateRel, ymin=FID, ymax=FID+1, fill=setting)) +
+  scale_fill_brewer(palette="Set1") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+  xlab("Relative Time") +
+  geom_hline(data = L,aes(yintercept = m), linetype="dotted") + 
+  theme(legend.position = 'none')
+
+
+plot2 = ggplot() +
+  geom_rect(data=episodes, aes(xmin=FromDate, xmax=ThruDate, ymin=FID, ymax=FID+1, fill=setting)) +
+  scale_fill_brewer(palette="Set1") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+  xlab("Days Since Diagnosis") +
+  theme(legend.title=element_blank()) +
+  geom_hline(data = L,aes(yintercept = m),linetype="dotted")
+
+require(cowplot)
+require(gridExtra)
+ p <- plot_grid(plot1,plot2,ncol=2, rel_widths = c(1,1.5))
+ title <- ggdraw() + draw_label("Sample Hospitalization in Cancer Patients", fontface='bold')
+ plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1)) # rel_heights values control title margins
+ 
+ 
