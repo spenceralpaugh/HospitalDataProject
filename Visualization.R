@@ -1,10 +1,16 @@
 load('synthetic_ESSCLC_data.RData')
+require(ggplot2)
+require(tidyverse)
 
 foo = matrix(0,nrow=nrow(episodes),ncol = length(t))
 dat = data.frame(episodes[,c('ID','setting')],foo)
 IDS = sample(unique(dat$ID),500) #this does not work with the current changes to the code, dat is not found and I can't remember where it was supposed to come from
 episodes = episodes[episodes$ID %in% IDS,]
 summary.stats = summary.stats[summary.stats$ID %in% IDS,]
+
+IDSplot = sample(unique(episodes$ID),100) 
+episodes1 = episodes[episodes$ID %in% IDSplot,]
+summary.stats1 = summary.stats[summary.stats$ID %in% IDSplot,]
 
 #IDS <- sample(unique(episodes$ID),500)    #took from Initial Investigations 
 #episodes <- episodes[episodes$ID %in% IDS,]
@@ -99,11 +105,11 @@ Viz = function(D,widedat,stats,DLabels){
       
       titlePanel("Hospitalization in Cancer Patients"),
       sidebarLayout(position="right",
-        sidebarPanel(selectInput('K',label = 'Select Number of Clusters',choices = 2:10,selected = 2),"Select Weighting For Clusters",
-          
-          uiOutput('weights')),
-        #mainPanel(plotOutput("Viz",height='500px'))
-        mainPanel(uiOutput('tabs'))
+                    sidebarPanel(selectInput('K',label = 'Select Number of Clusters',choices = 2:10,selected = 2),"Select Weighting For Clusters",
+                                 
+                                 uiOutput('weights')),
+                    #mainPanel(plotOutput("Viz",height='500px'))
+                    mainPanel(uiOutput('tabs'))
       )
     ),
     server = function(input, output){
@@ -114,15 +120,17 @@ Viz = function(D,widedat,stats,DLabels){
         })})
       
       output$tabs = renderUI({
-        myTabs = lapply(1:(as.numeric(input$K)), function(i) {
+        myTabs = lapply(0:(as.numeric(input$K)), function(i) {
+          if(i>=1){
           tabPanel(paste0('Cluster ', i), plotOutput(paste0('plot',i)))
+          }else{tabPanel('Overall', plotOutput('blockviz'))}
         })
         do.call(tabsetPanel, myTabs)
-        })
+      })
       #cluster based on new distance
-
-            
-            
+      
+      
+      
       observe({
         if(!is.null(input$w1)){
           
@@ -133,21 +141,62 @@ Viz = function(D,widedat,stats,DLabels){
           
           clusters = pam(Dtmp,k=K)$clustering
           #clusters
-            lapply(1:K, function(k){
-              #cat(k,' BLAH')
-                output[[paste0('plot',k)]] = renderPlot({
-                  foo = colMeans(widedat[clusters == k,-1])
-                  plot(foo[1:99],type='n',main=paste0('Cluster ',k),ylab='Proportion',xlab='',xaxt='n',ylim=c(0,1))
-                  for(j in 1:4){
-                    lines(foo[(1+99*(j-1)):(99 + 99*(j-1))],col=j)
-                  }
-                })
+          
+          output$blockviz = renderPlot({ #issue here with data
+            clust = data.frame(ID=IDSplot,clust = clusters[IDS %in% IDSplot])
+            episodes1 = episodes1 %>% left_join(clust) %>%  arrange(clust, ID,order)
+            
+            IDS1 = unique(episodes1$ID)
+            episodes$FID = unlist(sapply(1:length(IDS1),function(i){
+              m = nrow(episodes1[episodes1$ID == IDS1[i],])
+              rep(i,m)
+            }))
+            
+            L = episodes1 %>% group_by(clust) %>% summarize(m=max(FID)+1) %>% select(m) %>% slice(1:(K-1))
+            
+            plot1 = ggplot() +
+              geom_rect(data=episodes, aes(xmin=FromDateRel, xmax=ThruDateRel, ymin=FID, ymax=FID+1, fill=setting)) +
+              scale_fill_brewer(palette="Set1") +
+              theme_minimal() +
+              theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                    panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+              xlab("Relative Time") +
+              geom_hline(data = L,aes(yintercept = m), linetype="dotted") + 
+              theme(legend.position = 'none')
+            
+            
+            plot2 = ggplot() +
+              geom_rect(data=episodes, aes(xmin=FromDate, xmax=ThruDate, ymin=FID, ymax=FID+1, fill=setting)) +
+              scale_fill_brewer(palette="Set1") +
+              theme_minimal() +
+              theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                    panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+              xlab("Days Since Diagnosis") +
+              theme(legend.title=element_blank()) +
+              geom_hline(data = L,aes(yintercept = m),linetype="dotted")
+            
+            require(cowplot)
+            require(gridExtra)
+            p <- plot_grid(plot1,plot2,ncol=2, rel_widths = c(1,1.5))
+            title <- ggdraw() + draw_label("Sample Hospitalization in Cancer Patients", fontface='bold')
+            plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1)) # rel_heights values control title margins
+          })
+            
+          lapply(1:K, function(k){
+            #cat(k,' BLAH')
+            output[[paste0('plot',k)]] = renderPlot({
+              foo = colMeans(widedat[clusters == k,-1])
+              plot(foo[1:99],type='n',main=paste0('Cluster ',k),ylab='Proportion',xlab='',xaxt='n',ylim=c(0,1))
+              for(j in 1:4){
+                lines(foo[(1+99*(j-1)):(99 + 99*(j-1))],col=j)
+              }
             })
+          })
         }
         
       })
-  # Add a column of summary info for each cluster....
-  }
+      # Add a column of summary info for each cluster....
+    }
   )
   
 }
